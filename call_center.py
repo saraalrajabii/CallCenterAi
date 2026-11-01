@@ -187,7 +187,7 @@ def _normalize(servers) -> list[dict]:
 
 
 async def _fetch_turn(client: httpx.AsyncClient):
-    """Request TURN credentials. Cloudflare keys take priority over HF_TOKEN."""
+    """Request TURN credentials: Cloudflare, then Metered, then HF/FastRTC."""
     key_id = os.getenv("CLOUDFLARE_TURN_KEY_ID")
     key_token = os.getenv("CLOUDFLARE_TURN_KEY_API_TOKEN")
     if key_id and key_token:
@@ -195,6 +195,14 @@ async def _fetch_turn(client: httpx.AsyncClient):
             f"https://rtc.live.cloudflare.com/v1/turn/keys/{key_id}/credentials/generate-ice-servers",
             headers={"Authorization": f"Bearer {key_token}"},
             json={"ttl": TURN_TTL},
+        )
+    metered_app = os.getenv("METERED_APP")
+    metered_key = os.getenv("METERED_API_KEY")
+    if metered_app and metered_key:
+        app_host = metered_app.removeprefix("https://").split(".")[0]
+        return "Metered", await client.get(
+            f"https://{app_host}.metered.live/api/v1/turn/credentials",
+            params={"apiKey": metered_key},
         )
     hf_token = os.getenv("HF_TOKEN")
     if hf_token:
@@ -274,7 +282,12 @@ else:
     logger.warning(f"UI not found at {UI_DIR}")
 
 
-_turn = "Cloudflare" if os.getenv("CLOUDFLARE_TURN_KEY_ID") else "HF/FastRTC" if os.getenv("HF_TOKEN") else "none (STUN only)"
+_turn = (
+    "Cloudflare" if os.getenv("CLOUDFLARE_TURN_KEY_ID")
+    else "Metered" if os.getenv("METERED_API_KEY")
+    else "HF/FastRTC" if os.getenv("HF_TOKEN")
+    else "none (STUN only)"
+)
 logger.info(f"TURN provider: {_turn}")
 logger.info(f"OPENAI_API_KEY set: {'yes' if os.getenv('OPENAI_API_KEY') else 'no'}")
 

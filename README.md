@@ -66,6 +66,8 @@ The repo is ready for a **Docker Space** (see `Dockerfile` and the header of thi
    - TURN credentials so WebRTC audio works from behind the host's firewall, either:
      - `CLOUDFLARE_TURN_KEY_ID` + `CLOUDFLARE_TURN_KEY_API_TOKEN` (Cloudflare Realtime TURN,
        1,000 GB/month free; recommended), or
+     - `METERED_APP` (e.g. `myapp` from `myapp.metered.live`) + `METERED_API_KEY`
+       (Metered Open Relay, 20 GB/month free), or
      - `HF_TOKEN` (free TURN via FastRTC/Hugging Face).
 3. Deploy: push this repo to the Space, or let the GitHub Action
    (`.github/workflows/deploy-huggingface.yml`) do it on every push to `main`. It needs a
