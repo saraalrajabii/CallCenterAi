@@ -23,6 +23,16 @@ from pipecat.runner.types import RunnerArguments
 from pipecat.runner.utils import create_transport
 from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.services.openai.stt import OpenAIRealtimeSTTService
+from pipecat.services.openai.realtime.events import (
+    AudioConfiguration,
+    AudioInput,
+    AudioOutput,
+    InputAudioNoiseReduction,
+    InputAudioTranscription,
+    SemanticTurnDetection,
+    SessionProperties,
+)
+from pipecat.services.openai.realtime.llm import OpenAIRealtimeLLMService
 from pipecat.services.openai.tts import OpenAITTSService
 from pipecat.transcriptions.language import Language
 from pipecat.transports.base_transport import BaseTransport, TransportParams
@@ -31,6 +41,10 @@ from pipecat.workers.runner import WorkerRunner
 load_dotenv(override=True)
 
 # Load the company knowledge base (knowledge.md, next to this file).
+# "realtime" (default): OpenAI Realtime speech-to-speech, fastest.
+# "classic": separate STT -> LLM -> TTS services.
+VOICE_MODE = os.getenv("VOICE_MODE", "realtime").lower()
+
 KNOWLEDGE_FILE = Path(__file__).parent / "knowledge.md"
 KNOWLEDGE = KNOWLEDGE_FILE.read_text(encoding="utf-8")
 
@@ -61,42 +75,53 @@ transport_params = {
 async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
     logger.info("Starting bot")
 
-    stt = OpenAIRealtimeSTTService(
-        api_key=os.environ["OPENAI_API_KEY"],
-        settings=OpenAIRealtimeSTTService.Settings(language=Language.AR),
-    )
+    if VOICE_MODE == "classic":
+        # STT -> LLM -> TTS (three OpenAI services, local VAD + turn model)
+        stt = OpenAIRealtimeSTTService(
+            api_key=os.environ["OPENAI_API_KEY"],
+            settings=OpenAIRealtimeSTTService.Settings(language=Language.AR),
+        )
+        tts = OpenAITTSService(
+            api_key=os.environ["OPENAI_API_KEY"],
+            settings=OpenAITTSService.Settings(voice="ballad"),
+        )
+        llm = OpenAILLMService(
+            api_key=os.environ["OPENAI_API_KEY"],
+            settings=OpenAILLMService.Settings(
+                model=os.getenv("OPENAI_MODEL", "gpt-4.1-mini"),
+                system_instruction=SYSTEM_PROMPT,
+            ),
+        )
+        context = LLMContext()
+        user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
+            context,
+            user_params=LLMUserAggregatorParams(vad_analyzer=SileroVADAnalyzer()),
+        )
+        processors = [transport.input(), stt, user_aggregator, llm, tts, transport.output(), assistant_aggregator]
+    else:
+        # OpenAI Realtime: one speech-to-speech model, turn detection on OpenAI's side.
+        # Lowest latency and almost no CPU on our server (good for free hosting).
+        llm = OpenAIRealtimeLLMService(
+            api_key=os.environ["OPENAI_API_KEY"],
+            settings=OpenAIRealtimeLLMService.Settings(
+                system_instruction=SYSTEM_PROMPT,
+                session_properties=SessionProperties(
+                    audio=AudioConfiguration(
+                        input=AudioInput(
+                            transcription=InputAudioTranscription(language="ar"),
+                            turn_detection=SemanticTurnDetection(eagerness="high"),
+                            noise_reduction=InputAudioNoiseReduction(type="near_field"),
+                        ),
+                        output=AudioOutput(voice=os.getenv("OPENAI_VOICE", "marin")),
+                    ),
+                ),
+            ),
+        )
+        context = LLMContext()
+        user_aggregator, assistant_aggregator = LLMContextAggregatorPair(context)
+        processors = [transport.input(), user_aggregator, llm, transport.output(), assistant_aggregator]
 
-    tts = OpenAITTSService(
-        api_key=os.environ["OPENAI_API_KEY"],
-        settings=OpenAITTSService.Settings(
-            voice="ballad",
-        ),
-    )
-
-    llm = OpenAILLMService(
-        api_key=os.environ["OPENAI_API_KEY"],
-        settings=OpenAILLMService.Settings(
-            system_instruction=SYSTEM_PROMPT,
-        ),
-    )
-
-    context = LLMContext()
-    user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
-        context,
-        user_params=LLMUserAggregatorParams(vad_analyzer=SileroVADAnalyzer()),
-    )
-
-    pipeline = Pipeline(
-        [
-            transport.input(),  # Transport user input
-            stt,  # STT
-            user_aggregator,  # User responses
-            llm,  # LLM
-            tts,  # TTS
-            transport.output(),  # Transport bot output
-            assistant_aggregator,  # Assistant spoken responses
-        ]
-    )
+    pipeline = Pipeline(processors)
 
     worker = PipelineWorker(
         pipeline,
@@ -310,6 +335,7 @@ _turn = (
     else "none (STUN only)"
 )
 logger.info(f"TURN provider: {_turn}")
+logger.info(f"Voice mode: {VOICE_MODE}")
 logger.info(f"OPENAI_API_KEY set: {'yes' if os.getenv('OPENAI_API_KEY') else 'no'}")
 
 

@@ -20,11 +20,13 @@ company knowledge base in [`knowledge.md`](knowledge.md).
 ## How it works
 
 ```
-Browser (React UI)  ⇄  WebRTC  ⇄  Pipecat bot (call_center.py)
-                                   ├─ Speech-to-text   OpenAI Realtime STT (Arabic)
-                                   ├─ LLM              OpenAI, system prompt = knowledge.md
-                                   └─ Text-to-speech   OpenAI TTS
+Browser (React UI)  ⇄  WebRTC  ⇄  Pipecat bot (call_center.py)  ⇄  OpenAI Realtime (speech-to-speech)
+                                                                    system prompt = knowledge.md
 ```
+
+Set `VOICE_MODE=classic` to use separate OpenAI STT → LLM → TTS services instead (more control,
+higher latency, needs more CPU). Optional: `OPENAI_VOICE` (default `marin`), `OPENAI_MODEL`
+(classic mode LLM, default `gpt-4.1-mini`).
 
 - **`call_center.py`**: the Pipecat voice pipeline plus a small FastAPI server. It loads
   `knowledge.md` into the system prompt, serves the UI at `http://localhost:7860`, and handles
