@@ -136,17 +136,129 @@ async def bot(runner_args: RunnerArguments):
     await run_bot(transport, runner_args)
 
 
+# --------------------------------------------------------------------------
+# Web server: serves the UI and handles WebRTC signalling.
+#
+# Locally it uses a public STUN server. On a host like Hugging Face Spaces,
+# set HF_TOKEN and it fetches free Cloudflare TURN credentials (via FastRTC's
+# service) so audio can reach the bot from behind the host's firewall.
+# --------------------------------------------------------------------------
+
+import asyncio
+import time
+
+import httpx
+import uvicorn
+from fastapi import BackgroundTasks, FastAPI
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
+
+from pipecat.runner.types import SmallWebRTCRunnerArguments
+from pipecat.transports.smallwebrtc.connection import IceServer
+from pipecat.transports.smallwebrtc.request_handler import (
+    SmallWebRTCPatchRequest,
+    SmallWebRTCRequest,
+    SmallWebRTCRequestHandler,
+)
+
+UI_DIR = Path(__file__).parent / "call-center-ui" / "dist"
+STUN = [{"urls": ["stun:stun.l.google.com:19302"]}]
+TURN_URL = "https://turn.fastrtc.org/credentials"
+TURN_TTL = 3600
+
+_ice_cache: dict = {"servers": None, "expires": 0.0}
+
+
+def _normalize(servers) -> list[dict]:
+    """Return ICE servers as a list of {urls, username?, credential?} dicts."""
+    if isinstance(servers, dict):
+        servers = servers.get("iceServers", [])
+    out = []
+    for s in servers or []:
+        urls = s.get("urls")
+        if isinstance(urls, str):
+            urls = [urls]
+        entry = {"urls": urls}
+        if s.get("username"):
+            entry["username"] = s["username"]
+            entry["credential"] = s.get("credential")
+        out.append(entry)
+    return out
+
+
+async def get_ice_servers() -> list[dict]:
+    """STUN locally; free TURN (cached, refreshed before expiry) when HF_TOKEN is set."""
+    token = os.getenv("HF_TOKEN")
+    if not token:
+        return STUN
+    if _ice_cache["servers"] and time.time() < _ice_cache["expires"]:
+        return _ice_cache["servers"]
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(
+                TURN_URL, headers={"Authorization": f"Bearer {token}"}, params={"ttl": TURN_TTL}
+            )
+            r.raise_for_status()
+        servers = _normalize(r.json()) or STUN
+        _ice_cache.update(servers=servers, expires=time.time() + TURN_TTL / 2)
+        logger.info(f"Fetched {len(servers)} ICE server entries (TURN)")
+        return servers
+    except Exception as e:
+        logger.error(f"Could not fetch TURN credentials, falling back to STUN: {e}")
+        return STUN
+
+
+app = FastAPI()
+webrtc_handler = SmallWebRTCRequestHandler()
+_sessions: set[asyncio.Task] = set()
+
+
+@app.get("/api/ice")
+async def ice():
+    """ICE servers for the browser (same ones the bot uses)."""
+    return {"iceServers": await get_ice_servers()}
+
+
+@app.post("/api/offer")
+async def offer(request: SmallWebRTCRequest, background_tasks: BackgroundTasks):
+    """WebRTC offer from the browser: start a bot for the new connection."""
+    servers = await get_ice_servers()
+    webrtc_handler.update_ice_servers([IceServer(**s) for s in servers])
+
+    async def on_connection(connection):
+        task = asyncio.create_task(bot(SmallWebRTCRunnerArguments(webrtc_connection=connection)))
+        _sessions.add(task)
+        task.add_done_callback(_sessions.discard)
+
+    return await webrtc_handler.handle_web_request(
+        request=request, webrtc_connection_callback=on_connection
+    )
+
+
+@app.patch("/api/offer")
+async def ice_candidate(request: SmallWebRTCPatchRequest):
+    """Trickle ICE candidates from the browser."""
+    await webrtc_handler.handle_patch_request(request)
+    return {"status": "success"}
+
+
+@app.get("/health")
+async def health():
+    return {"ok": True}
+
+
+if UI_DIR.exists():
+    app.mount("/client", StaticFiles(directory=UI_DIR, html=True), name="ui")
+
+    @app.get("/", include_in_schema=False)
+    async def root():
+        return RedirectResponse(url="/client/")
+else:
+    logger.warning(f"UI not found at {UI_DIR}")
+
+
 if __name__ == "__main__":
-    from fastapi.staticfiles import StaticFiles
-
-    from pipecat.runner.run import app, main
-
-    # Serve the custom call center UI (call-center-ui/dist) at /client,
-    # in place of the default Pipecat Playground.
-    UI_DIR = Path(__file__).parent / "call-center-ui" / "dist"
-    if UI_DIR.exists():
-        app.mount("/client", StaticFiles(directory=UI_DIR, html=True), name="call-center-ui")
-    else:
-        logger.warning(f"Custom UI not found at {UI_DIR}, using the default Playground.")
-
-    main()
+    host = os.getenv("HOST", "localhost")
+    port = int(os.getenv("PORT", "7860"))
+    print(f"\n   → Open: http://localhost:{port}\n")
+    uvicorn.run(app, host=host, port=port)

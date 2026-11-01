@@ -1,3 +1,14 @@
+---
+title: CallCenterAi
+emoji: 📞
+colorFrom: green
+colorTo: yellow
+sdk: docker
+app_port: 7860
+pinned: false
+short_description: AI voice call center for a fictional delivery company
+---
+
 # CallCenterAi
 
 An AI **voice call center** for *Palm Oasis Delivery* (واحة النخيل للتوصيل), a fictional delivery company.
@@ -15,8 +26,9 @@ Browser (React UI)  ⇄  WebRTC  ⇄  Pipecat bot (call_center.py)
                                    └─ Text-to-speech   OpenAI TTS
 ```
 
-- **`call_center.py`**: the Pipecat voice pipeline. It loads `knowledge.md` into the system prompt
-  and also serves the UI at `http://localhost:7860`.
+- **`call_center.py`**: the Pipecat voice pipeline plus a small FastAPI server. It loads
+  `knowledge.md` into the system prompt, serves the UI at `http://localhost:7860`, and handles
+  WebRTC signalling (`/api/offer`, `/api/ice`).
 - **`knowledge.md`**: everything the assistant knows: services, prices, hours, returns, FAQs.
   Edit it and restart the bot to "teach" it new information.
 - **`call-center-ui/`**: custom React + TypeScript + Tailwind interface built on
@@ -43,6 +55,22 @@ uv run call_center.py
 ```
 
 Open **http://localhost:7860** and press **اتصل بخدمة العملاء**.
+
+## Deploy free on Hugging Face Spaces
+
+The repo is ready for a **Docker Space** (see `Dockerfile` and the header of this README).
+
+1. Create a Space on huggingface.co → SDK **Docker** → Blank.
+2. In the Space **Settings → Variables and secrets**, add secrets:
+   - `OPENAI_API_KEY`: your OpenAI key
+   - `HF_TOKEN`: a Hugging Face token (read). Used to get **free Cloudflare TURN**
+     credentials (10 GB/month) so WebRTC audio works from behind the Space's firewall.
+3. Deploy: push this repo to the Space, or let the GitHub Action
+   (`.github/workflows/deploy-huggingface.yml`) do it on every push to `main`. It needs a
+   GitHub secret `HF_TOKEN` (write access) and a variable `HF_SPACE` (`username/space-name`).
+
+> Anyone with the link can call the bot and spend your OpenAI credit. Set a usage limit in
+> your OpenAI account.
 
 ## Edit the UI (needs Node.js)
 

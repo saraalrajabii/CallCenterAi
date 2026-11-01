@@ -61,17 +61,26 @@ export function useCall() {
   const start = useCallback(async () => {
     if (!client) return;
     setError(null);
-    push("connect", "/start");
+    push("connect", "/api/offer");
     try {
-      await client.startBotAndConnect({
-        endpoint: "/start",
-        requestData: { transport: "webrtc", enableDefaultIceServers: true },
+      // ICE servers (STUN locally, free TURN when deployed) come from the bot server.
+      let iceServers: RTCIceServer[] = [{ urls: ["stun:stun.l.google.com:19302"] }];
+      try {
+        const res = await fetch("/api/ice");
+        if (res.ok) iceServers = (await res.json()).iceServers;
+      } catch {
+        /* fall back to STUN */
+      }
+      push("iceServers", iceServers.map((s) => [s.urls].flat()[0]).join(", "));
+      await client.connect({
+        webrtcRequestParams: { endpoint: "/api/offer" },
+        iceConfig: { iceServers },
       });
     } catch (e) {
       const text = e instanceof Error ? e.message : String(e);
       push("connectFailed", text);
       setError(
-        "تعذّر الاتصال بالبوت. تأكدي إن call_center.py شغّال على المنفذ 7860 ثم حاولي مرة ثانية.",
+        "تعذّر الاتصال بالبوت. تأكد إن البوت شغّال ثم حاول مرة ثانية.",
       );
       try {
         await client.disconnect();
