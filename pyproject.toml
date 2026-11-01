@@ -1,0 +1,9 @@
+[project]
+name = "callcenterai"
+version = "1.0.0"
+description = "AI voice call center for a fictional delivery company, built with Pipecat + OpenAI"
+requires-python = ">=3.11"
+dependencies = [
+    "pipecat-ai[openai,webrtc,runner,silero]==1.15.0",
+    "python-dotenv",
+]
