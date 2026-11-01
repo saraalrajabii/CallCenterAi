@@ -11,7 +11,17 @@ from dotenv import load_dotenv
 from loguru import logger
 
 from pipecat.audio.vad.silero import SileroVADAnalyzer
-from pipecat.frames.frames import LLMRunFrame
+from pipecat.frames.frames import (
+    BotStoppedSpeakingFrame,
+    EndFrame,
+    InterruptionFrame,
+    LLMFullResponseEndFrame,
+    LLMRunFrame,
+    TTSStoppedFrame,
+    TTSTextFrame,
+)
+from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+from pipecat.utils.text.base_text_aggregator import TextType
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker, ProcessorUnusablePolicy
 from pipecat.processors.aggregators.llm_context import LLMContext
@@ -72,6 +82,52 @@ transport_params = {
 }
 
 
+class WordJoiner(FrameProcessor):
+    """Joins OpenAI Realtime transcript deltas into whole words.
+
+    Realtime sends the bot's transcript in tiny pieces (for Arabic often parts of
+    a word). The browser client puts a space between pieces, which splits Arabic
+    words ("مر حب اً"). We buffer the pieces and only pass on complete words.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self._buf = ""
+        self._last = None
+
+    async def _emit(self, text: str):
+        text = text.strip()
+        if not text:
+            return
+        frame = TTSTextFrame(text, text_type=TextType.SENTENCE)
+        if self._last is not None:
+            frame.pts = self._last.pts
+        await self.push_frame(frame)
+
+    async def _flush(self):
+        buf, self._buf = self._buf, ""
+        await self._emit(buf)
+
+    async def process_frame(self, frame, direction):
+        await super().process_frame(frame, direction)
+
+        if isinstance(frame, TTSTextFrame) and direction == FrameDirection.DOWNSTREAM:
+            self._last = frame
+            self._buf += frame.text
+            cut = max(self._buf.rfind(" "), self._buf.rfind("\n"))
+            if cut > 0:
+                ready, self._buf = self._buf[:cut], self._buf[cut + 1 :]
+                await self._emit(ready)
+            return
+
+        if isinstance(frame, InterruptionFrame):
+            self._buf = ""
+        elif isinstance(frame, (LLMFullResponseEndFrame, TTSStoppedFrame, BotStoppedSpeakingFrame, EndFrame)):
+            await self._flush()
+
+        await self.push_frame(frame, direction)
+
+
 async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
     logger.info("Starting bot")
 
@@ -119,7 +175,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
         )
         context = LLMContext()
         user_aggregator, assistant_aggregator = LLMContextAggregatorPair(context)
-        processors = [transport.input(), user_aggregator, llm, transport.output(), assistant_aggregator]
+        processors = [transport.input(), user_aggregator, llm, WordJoiner(), transport.output(), assistant_aggregator]
 
     pipeline = Pipeline(processors)
 
