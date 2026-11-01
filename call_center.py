@@ -212,8 +212,28 @@ async def _fetch_turn(client: httpx.AsyncClient):
     return None, None
 
 
+METERED_URLS = [
+    "turn:global.relay.metered.ca:80",
+    "turn:global.relay.metered.ca:80?transport=tcp",
+    "turn:global.relay.metered.ca:443",
+    "turns:global.relay.metered.ca:443?transport=tcp",
+]
+
+
+def _static_turn() -> list[dict] | None:
+    """Fixed TURN username/password (e.g. a Metered credential), if configured."""
+    user, cred = os.getenv("TURN_USERNAME"), os.getenv("TURN_CREDENTIAL")
+    if not (user and cred):
+        return None
+    urls = [u.strip() for u in os.getenv("TURN_URLS", "").split(",") if u.strip()] or METERED_URLS
+    return [{"urls": ["stun:stun.relay.metered.ca:80"]}, {"urls": urls, "username": user, "credential": cred}]
+
+
 async def get_ice_servers() -> list[dict]:
     """STUN locally; TURN (cached, refreshed before expiry) when credentials are configured."""
+    static = _static_turn()
+    if static:
+        return static
     if _ice_cache["servers"] and time.time() < _ice_cache["expires"]:
         return _ice_cache["servers"]
     try:
@@ -283,7 +303,8 @@ else:
 
 
 _turn = (
-    "Cloudflare" if os.getenv("CLOUDFLARE_TURN_KEY_ID")
+    "static TURN_USERNAME/TURN_CREDENTIAL" if os.getenv("TURN_USERNAME")
+    else "Cloudflare" if os.getenv("CLOUDFLARE_TURN_KEY_ID")
     else "Metered" if os.getenv("METERED_API_KEY")
     else "HF/FastRTC" if os.getenv("HF_TOKEN")
     else "none (STUN only)"

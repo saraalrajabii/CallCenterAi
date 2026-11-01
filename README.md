@@ -68,6 +68,8 @@ The repo is ready for a **Docker Space** (see `Dockerfile` and the header of thi
        1,000 GB/month free; recommended), or
      - `METERED_APP` (e.g. `myapp` from `myapp.metered.live`) + `METERED_API_KEY`
        (Metered Open Relay, 20 GB/month free), or
+     - `TURN_USERNAME` + `TURN_CREDENTIAL` (+ optional comma-separated `TURN_URLS`,
+       defaults to Metered's relay URLs) for a fixed credential, or
      - `HF_TOKEN` (free TURN via FastRTC/Hugging Face).
 3. Deploy: push this repo to the Space, or let the GitHub Action
    (`.github/workflows/deploy-huggingface.yml`) do it on every push to `main`. It needs a
