@@ -63,8 +63,10 @@ The repo is ready for a **Docker Space** (see `Dockerfile` and the header of thi
 1. Create a Space on huggingface.co → SDK **Docker** → Blank.
 2. In the Space **Settings → Variables and secrets**, add secrets:
    - `OPENAI_API_KEY`: your OpenAI key
-   - `HF_TOKEN`: a Hugging Face token (read). Used to get **free Cloudflare TURN**
-     credentials (10 GB/month) so WebRTC audio works from behind the Space's firewall.
+   - TURN credentials so WebRTC audio works from behind the host's firewall, either:
+     - `CLOUDFLARE_TURN_KEY_ID` + `CLOUDFLARE_TURN_KEY_API_TOKEN` (Cloudflare Realtime TURN,
+       1,000 GB/month free; recommended), or
+     - `HF_TOKEN` (free TURN via FastRTC/Hugging Face).
 3. Deploy: push this repo to the Space, or let the GitHub Action
    (`.github/workflows/deploy-huggingface.yml`) do it on every push to `main`. It needs a
    GitHub secret `HF_TOKEN` (write access) and a variable `HF_SPACE` (`username/space-name`).

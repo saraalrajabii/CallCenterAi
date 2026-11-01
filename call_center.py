@@ -186,24 +186,39 @@ def _normalize(servers) -> list[dict]:
     return out
 
 
+async def _fetch_turn(client: httpx.AsyncClient):
+    """Request TURN credentials. Cloudflare keys take priority over HF_TOKEN."""
+    key_id = os.getenv("CLOUDFLARE_TURN_KEY_ID")
+    key_token = os.getenv("CLOUDFLARE_TURN_KEY_API_TOKEN")
+    if key_id and key_token:
+        return "Cloudflare", await client.post(
+            f"https://rtc.live.cloudflare.com/v1/turn/keys/{key_id}/credentials/generate-ice-servers",
+            headers={"Authorization": f"Bearer {key_token}"},
+            json={"ttl": TURN_TTL},
+        )
+    hf_token = os.getenv("HF_TOKEN")
+    if hf_token:
+        return "HF/FastRTC", await client.get(
+            TURN_URL, headers={"Authorization": f"Bearer {hf_token}"}, params={"ttl": TURN_TTL}
+        )
+    return None, None
+
+
 async def get_ice_servers() -> list[dict]:
-    """STUN locally; free TURN (cached, refreshed before expiry) when HF_TOKEN is set."""
-    token = os.getenv("HF_TOKEN")
-    if not token:
-        return STUN
+    """STUN locally; TURN (cached, refreshed before expiry) when credentials are configured."""
     if _ice_cache["servers"] and time.time() < _ice_cache["expires"]:
         return _ice_cache["servers"]
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            r = await client.get(
-                TURN_URL, headers={"Authorization": f"Bearer {token}"}, params={"ttl": TURN_TTL}
-            )
-        if r.status_code != 200:
-            logger.error(f"TURN request failed: HTTP {r.status_code}: {r.text[:300]}")
+            source, r = await _fetch_turn(client)
+        if r is None:
+            return STUN
+        if r.status_code not in (200, 201):
+            logger.error(f"TURN request to {source} failed: HTTP {r.status_code}: {r.text[:300]}")
             return STUN
         servers = _normalize(r.json()) or STUN
         _ice_cache.update(servers=servers, expires=time.time() + TURN_TTL / 2)
-        logger.info(f"Fetched {len(servers)} ICE server entries (TURN)")
+        logger.info(f"Fetched {len(servers)} ICE server entries from {source} (TURN)")
         return servers
     except Exception as e:
         logger.error(f"TURN request error, falling back to STUN: {e!r}")
@@ -259,7 +274,8 @@ else:
     logger.warning(f"UI not found at {UI_DIR}")
 
 
-logger.info(f"HF_TOKEN set: {'yes' if os.getenv('HF_TOKEN') else 'no'} (TURN {'enabled' if os.getenv('HF_TOKEN') else 'disabled, STUN only'})")
+_turn = "Cloudflare" if os.getenv("CLOUDFLARE_TURN_KEY_ID") else "HF/FastRTC" if os.getenv("HF_TOKEN") else "none (STUN only)"
+logger.info(f"TURN provider: {_turn}")
 logger.info(f"OPENAI_API_KEY set: {'yes' if os.getenv('OPENAI_API_KEY') else 'no'}")
 
 
