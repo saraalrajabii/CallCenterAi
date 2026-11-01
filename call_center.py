@@ -198,13 +198,15 @@ async def get_ice_servers() -> list[dict]:
             r = await client.get(
                 TURN_URL, headers={"Authorization": f"Bearer {token}"}, params={"ttl": TURN_TTL}
             )
-            r.raise_for_status()
+        if r.status_code != 200:
+            logger.error(f"TURN request failed: HTTP {r.status_code}: {r.text[:300]}")
+            return STUN
         servers = _normalize(r.json()) or STUN
         _ice_cache.update(servers=servers, expires=time.time() + TURN_TTL / 2)
         logger.info(f"Fetched {len(servers)} ICE server entries (TURN)")
         return servers
     except Exception as e:
-        logger.error(f"Could not fetch TURN credentials, falling back to STUN: {e}")
+        logger.error(f"TURN request error, falling back to STUN: {e!r}")
         return STUN
 
 
@@ -255,6 +257,10 @@ if UI_DIR.exists():
         return RedirectResponse(url="/client/")
 else:
     logger.warning(f"UI not found at {UI_DIR}")
+
+
+logger.info(f"HF_TOKEN set: {'yes' if os.getenv('HF_TOKEN') else 'no'} (TURN {'enabled' if os.getenv('HF_TOKEN') else 'disabled, STUN only'})")
+logger.info(f"OPENAI_API_KEY set: {'yes' if os.getenv('OPENAI_API_KEY') else 'no'}")
 
 
 if __name__ == "__main__":
