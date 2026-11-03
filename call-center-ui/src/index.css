@@ -2,22 +2,17 @@
 
 @theme {
   --font-sans: "IBM Plex Sans Arabic", ui-sans-serif, system-ui, sans-serif;
-  --color-palm-50: #eef7f1;
-  --color-palm-100: #d6ecdf;
-  --color-palm-200: #aed9bf;
+  --font-display: "Alexandria", "IBM Plex Sans Arabic", ui-sans-serif, sans-serif;
+  --color-ground: #f3f4ee;
+  --color-line: #e3e6dc;
+  --color-soft: #eef0e8;
+  --color-ink: #0b1a14;
+  --color-muted: #5b6b63;
+  --color-palm: #0f3d2e;
   --color-palm-500: #138a55;
-  --color-palm-600: #0e7347;
-  --color-palm-700: #0b5d3b;
-  --color-palm-800: #0a4a30;
-  --color-palm-900: #08371f;
-  --color-sun-300: #fcd34d;
-  --color-sun-400: #fbbf24;
-  --color-sun-500: #f59e0b;
-  --color-sun-600: #ea7a0c;
-  --color-sand-50: #fbf9f4;
-  --color-sand-100: #f5f0e4;
-  --color-sand-200: #ebe3cf;
-  --color-ink: #10231a;
+  --color-lime: #c8f169;
+  --color-lime-200: #e2fba6;
+  --color-mist: #c9d6cf;
 }
 
 html,
@@ -28,137 +23,114 @@ body,
 
 body {
   margin: 0;
-  background: var(--color-sand-50);
+  background: var(--color-ground);
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
 
-/* Hero background: deep palm green with soft light and a road-line pattern */
-.hero-bg {
-  background:
-    radial-gradient(900px 420px at 85% -10%, rgba(251, 191, 36, 0.22), transparent 60%),
-    radial-gradient(700px 500px at 0% 110%, rgba(19, 138, 85, 0.55), transparent 60%),
-    linear-gradient(160deg, #0b5d3b 0%, #08371f 100%);
-  position: relative;
-  overflow: hidden;
-}
-.hero-bg::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image: repeating-linear-gradient(
-    -24deg,
-    transparent 0 46px,
-    rgba(255, 255, 255, 0.035) 46px 48px
-  );
-  pointer-events: none;
-}
-/* dashed "route" line */
-.route {
-  stroke-dasharray: 6 10;
-  animation: route 1.6s linear infinite;
-}
-@keyframes route {
-  to { stroke-dashoffset: -32; }
-}
-
-.card {
-  background: #fff;
-  border: 1px solid var(--color-sand-200);
-  box-shadow: 0 1px 2px rgba(16, 35, 26, 0.04), 0 12px 32px -16px rgba(16, 35, 26, 0.18);
-}
-
-/* ---------- Agent voice orb (brand colors) ---------- */
+/* ---------- Agent orb (pulses with the voice level) ---------- */
 .orb-wrap {
   --level: 0;
   position: relative;
-  width: 168px;
-  aspect-ratio: 1;
   display: grid;
   place-items: center;
+  aspect-ratio: 1;
 }
 .orb-ring {
   position: absolute;
   inset: 0;
   border-radius: 9999px;
-  border: 2px solid rgba(19, 138, 85, 0.22);
-  transform: scale(calc(1 + var(--level) * 0.3));
-  opacity: calc(0.35 + var(--level) * 0.65);
+  border: 1px solid rgba(200, 241, 105, 0.22);
+  transform: scale(calc(1 + var(--level) * 0.25));
+  opacity: calc(0.4 + var(--level) * 0.6);
   transition: transform 90ms linear, opacity 90ms linear;
 }
 .orb-ring.r2 {
-  inset: -16px;
-  border-color: rgba(245, 158, 11, 0.25);
-  transform: scale(calc(1 + var(--level) * 0.5));
+  inset: 12%;
+  border-color: rgba(200, 241, 105, 0.38);
+  transform: scale(calc(1 + var(--level) * 0.4));
 }
 .orb {
-  position: relative;
-  width: 74%;
+  width: 60%;
   aspect-ratio: 1;
   border-radius: 9999px;
-  background:
-    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.75), transparent 22%),
-    conic-gradient(from 0deg, #138a55, #2dd4bf, #fbbf24, #f59e0b, #138a55);
-  box-shadow:
-    0 0 calc(18px + var(--level) * 60px) rgba(19, 138, 85, calc(0.25 + var(--level) * 0.45)),
-    inset 0 -14px 36px rgba(8, 55, 31, 0.45);
-  transform: scale(calc(0.95 + var(--level) * 0.12));
+  background: radial-gradient(circle at 35% 30%, #ffffff 0 7%, var(--color-lime) 32%, var(--color-palm-500) 78%);
+  box-shadow: 0 0 calc(24px + var(--level) * 70px) rgba(200, 241, 105, calc(0.25 + var(--level) * 0.45));
+  transform: scale(calc(0.94 + var(--level) * 0.14));
   transition: transform 90ms linear, box-shadow 120ms linear;
-  animation: spin 14s linear infinite;
-}
-.orb-icon {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  color: rgba(255, 255, 255, 0.95);
-  filter: drop-shadow(0 2px 6px rgba(8, 55, 31, 0.45));
 }
 .orb.idle {
-  filter: grayscale(0.7) brightness(0.95) opacity(0.75);
-  animation-duration: 40s;
+  filter: saturate(0.4) brightness(0.9);
 }
 .orb.connecting {
-  animation: spin 2.4s linear infinite, breathe 1.6s ease-in-out infinite;
+  animation: breathe 1.4s ease-in-out infinite;
 }
 .orb.user {
-  filter: hue-rotate(-25deg) saturate(1.2);
+  filter: hue-rotate(-30deg) saturate(1.15);
 }
-@keyframes spin { to { rotate: 360deg; } }
 @keyframes breathe {
-  0%, 100% { opacity: 0.65; }
-  50% { opacity: 1; }
+  0%, 100% { opacity: 0.55; transform: scale(0.92); }
+  50% { opacity: 1; transform: scale(1); }
 }
 
-/* Live voice bars */
-.bars span {
-  display: inline-block;
-  width: 3px;
-  border-radius: 2px;
-  background: currentColor;
-  animation: bar 0.9s ease-in-out infinite;
+/* Small avatar orb in card headers */
+.orb-mini {
+  border-radius: 9999px;
+  background: radial-gradient(circle at 35% 30%, #ffffff 0 8%, var(--color-lime) 30%, var(--color-palm-500) 75%);
 }
-.bars span:nth-child(2) { animation-delay: 0.15s; }
-.bars span:nth-child(3) { animation-delay: 0.3s; }
-.bars span:nth-child(4) { animation-delay: 0.45s; }
-@keyframes bar {
-  0%, 100% { height: 4px; }
-  50% { height: 14px; }
+
+/* ---------- Waveform (bars scale with the voice level) ---------- */
+.wave {
+  --level: 0;
+}
+.wave span {
+  display: block;
+  width: 4px;
+  height: 40px;
+  border-radius: 4px;
+  background: var(--color-palm);
+  transform-origin: center;
+  transform: scaleY(calc(var(--base) + var(--level) * var(--gain)));
+  transition: transform 80ms linear;
+}
+.wave.dim span {
+  opacity: 0.35;
+}
+.wave.on-dark span {
+  background: var(--color-lime);
+}
+
+/* Live dot */
+.live-dot {
+  animation: pulse 1.4s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
 }
 
 .scroll-thin {
   scrollbar-width: thin;
-  scrollbar-color: rgba(16, 35, 26, 0.18) transparent;
+  scrollbar-color: rgba(11, 26, 20, 0.18) transparent;
 }
 .bubble-in {
-  animation: bubble-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: bubble-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 @keyframes bubble-in {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: none; }
 }
 
+.sr-only-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .orb, .route, .bars span { animation: none !important; }
+  .orb, .live-dot, .orb.connecting { animation: none !important; }
 }
